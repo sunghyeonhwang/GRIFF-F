@@ -14,7 +14,23 @@ const PROJECT = {
   createdAt: '2026-02-28',
 };
 
-const INITIAL_COMMENTS = [
+// Supabase 초기화
+const __sb = window.__griffSupabase?.initSupabase?.();
+
+// DB 코멘트 → 앱 포맷 변환
+function dbToComment(row) {
+  return {
+    id: row.id,
+    timecode: row.timecode_seconds,
+    body: row.body,
+    author: row.author_name,
+    color: row.author_color || '#3d8bfd',
+    createdAt: new Date(row.created_at).toLocaleString('ko-KR'),
+    resolved: row.is_resolved,
+  };
+}
+
+const FALLBACK_COMMENTS = [
   { id: 1, timecode: 12, body: '오프닝 로고 애니메이션 속도 조절 필요', author: '김성현', color: '#3d8bfd', createdAt: '2026-03-01 14:23', resolved: false },
   { id: 2, timecode: 34, body: '이 씬 컬러그레이딩 좀 더 따뜻하게', author: '박지영', color: '#f59e0b', createdAt: '2026-03-01 15:10', resolved: false },
   { id: 3, timecode: 75, body: 'BGM 볼륨 살짝 낮춰주세요', author: '이클라이언트', color: '#22d3ee', createdAt: '2026-03-02 09:45', resolved: true },
@@ -79,7 +95,7 @@ function ShareIcon() {
 // ========================================
 // Header Component
 // ========================================
-function Header({ onExportClick, showExport, onShareClick }) {
+function Header({ onExportClick, showExport, onShareClick, comments, duration }) {
   return (
     <header className="h-14 border-b border-frame-border flex items-center justify-between px-5 flex-shrink-0">
       <div className="flex items-center gap-4">
@@ -102,7 +118,7 @@ function Header({ onExportClick, showExport, onShareClick }) {
             <ExportIcon /> 내보내기
             <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="ml-0.5"><path d="M7 10l5 5 5-5z"/></svg>
           </button>
-          {showExport && <ExportDropdown />}
+          {showExport && <ExportDropdown comments={comments} duration={duration} />}
         </div>
       </div>
     </header>
@@ -112,12 +128,14 @@ function Header({ onExportClick, showExport, onShareClick }) {
 // ========================================
 // Export Dropdown
 // ========================================
-function ExportDropdown() {
+function ExportDropdown({ comments, duration }) {
+  const exp = window.__griffExport;
+
   const formats = [
-    { label: 'Premiere Pro XML', desc: '.xml 마커', icon: 'Pr' },
-    { label: 'Final Cut Pro', desc: '.fcpxml', icon: 'Fc' },
-    { label: 'DaVinci Resolve', desc: '.edl 마커', icon: 'Dv' },
-    { label: 'CSV', desc: '.csv 스프레드시트', icon: 'Cs' },
+    { label: 'Premiere Pro XML', desc: '.xml 마커', icon: 'Pr', action: () => exp?.exportPremiereXML(comments, PROJECT.title, duration) },
+    { label: 'Final Cut Pro', desc: '.fcpxml', icon: 'Fc', action: () => exp?.exportFCPXML(comments, PROJECT.title, duration) },
+    { label: 'DaVinci Resolve', desc: '.edl 마커', icon: 'Dv', action: () => exp?.exportDaVinciEDL(comments, PROJECT.title) },
+    { label: 'CSV', desc: '.csv 스프레드시트', icon: 'Cs', action: () => exp?.exportCSV(comments, PROJECT.title) },
   ];
 
   return (
@@ -126,7 +144,7 @@ function ExportDropdown() {
         <span className="text-[11px] font-mono text-frame-muted uppercase tracking-wider">Export Format</span>
       </div>
       {formats.map((f, i) => (
-        <button key={i} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-frame-accent/10 transition-colors text-left group">
+        <button key={i} onClick={f.action} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-frame-accent/10 transition-colors text-left group">
           <span className="w-7 h-7 rounded bg-frame-surface border border-frame-border flex items-center justify-center text-[10px] font-mono font-bold text-frame-muted group-hover:text-frame-accent group-hover:border-frame-accent/30 transition-colors">{f.icon}</span>
           <div>
             <div className="text-[13px] text-frame-text">{f.label}</div>
@@ -351,9 +369,9 @@ function CommentItem({ comment, isActive, onClick, onResolve }) {
 // ========================================
 // Comment Panel Component
 // ========================================
-function CommentPanel({ comments, activeCommentId, onCommentClick, onResolve, onAddComment, currentTime }) {
+function CommentPanel({ comments, activeCommentId, onCommentClick, onResolve, onAddComment, currentTime, guestName }) {
   const [inputText, setInputText] = useState('');
-  const [authorName, setAuthorName] = useState('나');
+  const [authorName, setAuthorName] = useState(guestName || '나');
   const inputRef = useRef(null);
   const resolvedCount = comments.filter(c => c.resolved).length;
 
@@ -403,9 +421,9 @@ function CommentPanel({ comments, activeCommentId, onCommentClick, onResolve, on
 // ========================================
 // Share Modal Component
 // ========================================
-function ShareModal({ onClose }) {
+function ShareModal({ onClose, shareToken }) {
   const [copied, setCopied] = useState(false);
-  const shareUrl = 'https://griff-frame.app/share/a1b2c3d4';
+  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${shareToken}`;
 
   const handleCopy = () => {
     navigator.clipboard?.writeText(shareUrl);
@@ -431,10 +449,47 @@ function ShareModal({ onClose }) {
 }
 
 // ========================================
+// Guest Name Modal Component
+// ========================================
+function GuestNameModal({ onSubmit }) {
+  const [name, setName] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (name.trim()) onSubmit(name.trim());
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+      <div className="bg-frame-elevated border border-frame-border rounded-xl p-6 w-96 shadow-2xl">
+        <div className="w-10 h-10 rounded-full bg-frame-accent/20 border border-frame-accent/30 flex items-center justify-center mx-auto mb-3">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-frame-accent">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          </svg>
+        </div>
+        <h3 className="font-display font-semibold text-[16px] text-frame-text text-center mb-1">GRIFF Frame</h3>
+        <p className="text-[13px] text-frame-muted text-center mb-4">코멘트를 남기려면 이름을 입력해주세요.</p>
+        <form onSubmit={handleSubmit}>
+          <input ref={inputRef} type="text" value={name} onChange={e => setName(e.target.value)} placeholder="이름을 입력하세요" className="w-full bg-frame-surface border border-frame-border rounded-md px-3 py-2.5 text-[14px] text-frame-text placeholder:text-frame-muted/50 focus:border-frame-accent transition-colors mb-3" />
+          <button type="submit" disabled={!name.trim()} className="w-full py-2.5 bg-frame-accent text-white text-[14px] font-medium rounded-md hover:bg-frame-accent/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            시작하기
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ========================================
 // App Component
 // ========================================
 function App() {
-  const [comments, setComments] = useState(INITIAL_COMMENTS);
+  const [comments, setComments] = useState([]);
   const [activeCommentId, setActiveCommentId] = useState(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(PROJECT.duration || 285);
@@ -443,6 +498,67 @@ function App() {
   const [isEnded, setIsEnded] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [dbReady, setDbReady] = useState(false);
+  const [guestName, setGuestName] = useState(() => localStorage.getItem('griff_guest_name') || '');
+  const [showGuestModal, setShowGuestModal] = useState(false);
+  const [shareToken, setShareToken] = useState('');
+
+  // 게스트 모드 감지 (URL에 ?share= 파라미터)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('share');
+    if (token) {
+      setShareToken(token);
+      if (!guestName) setShowGuestModal(true);
+    }
+  }, []);
+
+  // share_token을 DB에서 가져오기
+  useEffect(() => {
+    const api = window.__griffSupabase;
+    if (!api?.getSupabase?.()) return;
+    api.getSupabase().from('projects').select('share_token').eq('id', api.getProjectId()).single().then(({ data }) => {
+      if (data?.share_token) setShareToken(data.share_token);
+    });
+  }, []);
+
+  // Supabase에서 코멘트 로드
+  useEffect(() => {
+    const api = window.__griffSupabase;
+    if (!api?.fetchComments) {
+      setComments(FALLBACK_COMMENTS);
+      return;
+    }
+
+    api.fetchComments().then(data => {
+      if (data && data.length > 0) {
+        setComments(data.map(dbToComment));
+        setDbReady(true);
+        console.log('[GRIFF] Supabase에서 코멘트 로드:', data.length, '개');
+      } else {
+        setComments(FALLBACK_COMMENTS);
+        console.log('[GRIFF] DB 코멘트 없음 — 폴백 데이터 사용');
+      }
+    });
+
+    // Realtime 구독
+    const channel = api.subscribeComments?.((payload) => {
+      console.log('[GRIFF] Realtime:', payload.eventType, payload.new);
+      if (payload.eventType === 'INSERT') {
+        setComments(prev => {
+          const exists = prev.find(c => c.id === payload.new.id);
+          if (exists) return prev;
+          return [...prev, dbToComment(payload.new)];
+        });
+      } else if (payload.eventType === 'UPDATE') {
+        setComments(prev => prev.map(c => c.id === payload.new.id ? dbToComment(payload.new) : c));
+      } else if (payload.eventType === 'DELETE') {
+        setComments(prev => prev.filter(c => c.id !== payload.old.id));
+      }
+    });
+
+    return () => { channel?.unsubscribe(); };
+  }, []);
 
   const handleTimeUpdate = useCallback((seconds) => { setCurrentTime(seconds); }, []);
   const handleDurationReady = useCallback((dur) => { setDuration(dur); }, []);
@@ -489,23 +605,60 @@ function App() {
   }, [comments]);
 
   const handleResolve = useCallback((commentId) => {
-    setComments(prev => prev.map(c => c.id === commentId ? { ...c, resolved: !c.resolved } : c));
-  }, []);
+    const comment = comments.find(c => c.id === commentId);
+    if (!comment) return;
+    const newResolved = !comment.resolved;
+
+    // 즉시 UI 업데이트 (optimistic)
+    setComments(prev => prev.map(c => c.id === commentId ? { ...c, resolved: newResolved } : c));
+
+    // DB 업데이트
+    const api = window.__griffSupabase;
+    if (api?.updateCommentResolved) {
+      api.updateCommentResolved(commentId, newResolved).catch(() => {
+        // 실패 시 롤백
+        setComments(prev => prev.map(c => c.id === commentId ? { ...c, resolved: !newResolved } : c));
+      });
+    }
+  }, [comments]);
 
   const handleAddComment = useCallback((newComment) => {
     const authorColors = ['#3d8bfd', '#f59e0b', '#22d3ee', '#a78bfa', '#f472b6'];
-    setComments(prev => [...prev, {
-      ...newComment,
-      id: Date.now(),
-      color: authorColors[Math.floor(Math.random() * authorColors.length)],
-      createdAt: new Date().toLocaleString('ko-KR'),
-      resolved: false,
-    }]);
+    const color = authorColors[Math.floor(Math.random() * authorColors.length)];
+
+    const api = window.__griffSupabase;
+    if (api?.insertComment) {
+      // DB에 저장 → Realtime으로 UI 자동 업데이트
+      api.insertComment({
+        timecode_seconds: newComment.timecode,
+        body: newComment.body,
+        author_name: newComment.author,
+        author_color: color,
+      }).then(data => {
+        if (data) {
+          // Realtime이 늦을 수 있으므로 즉시 추가
+          setComments(prev => {
+            const exists = prev.find(c => c.id === data.id);
+            if (exists) return prev;
+            return [...prev, dbToComment(data)];
+          });
+        }
+      });
+    } else {
+      // 폴백: 로컬 저장
+      setComments(prev => [...prev, {
+        ...newComment,
+        id: Date.now(),
+        color,
+        createdAt: new Date().toLocaleString('ko-KR'),
+        resolved: false,
+      }]);
+    }
   }, []);
 
   return (
     <div className="h-screen flex flex-col">
-      <Header onExportClick={(e) => { e.stopPropagation(); setShowExport(prev => !prev); }} showExport={showExport} onShareClick={() => setShowShare(true)} />
+      <Header onExportClick={(e) => { e.stopPropagation(); setShowExport(prev => !prev); }} showExport={showExport} onShareClick={() => setShowShare(true)} comments={comments} duration={duration} />
 
       <div className="flex-1 flex min-h-0">
         <div className="flex-1 flex flex-col p-4 pr-0 min-w-0 overflow-hidden">
@@ -522,11 +675,12 @@ function App() {
         </div>
 
         <div className="w-[340px] border-l border-frame-border flex-shrink-0 flex flex-col">
-          <CommentPanel comments={comments} activeCommentId={activeCommentId} onCommentClick={handleCommentClick} onResolve={handleResolve} onAddComment={handleAddComment} currentTime={currentTime} />
+          <CommentPanel comments={comments} activeCommentId={activeCommentId} onCommentClick={handleCommentClick} onResolve={handleResolve} onAddComment={handleAddComment} currentTime={currentTime} guestName={guestName} />
         </div>
       </div>
 
-      {showShare && <ShareModal onClose={() => setShowShare(false)} />}
+      {showShare && <ShareModal onClose={() => setShowShare(false)} shareToken={shareToken} />}
+      {showGuestModal && <GuestNameModal onSubmit={(name) => { setGuestName(name); localStorage.setItem('griff_guest_name', name); setShowGuestModal(false); }} />}
     </div>
   );
 }
