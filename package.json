@@ -1,0 +1,17 @@
+{
+  "name": "griff-frame",
+  "version": "0.1.0",
+  "description": "영상 리뷰 협업 플랫폼 — Frame.io 클론",
+  "main": "scripts/serve.js",
+  "scripts": {
+    "start": "node scripts/serve.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GRIFF Frame — Video Review</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React 18 CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Vimeo Player SDK -->
+  <script src="https://player.vimeo.com/api/player.js"></script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" rel="stylesheet">
+
+  <!-- Tailwind Config -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            frame: {
+              bg: '#08080a',
+              surface: '#111114',
+              elevated: '#1a1a1f',
+              border: '#2a2a32',
+              muted: '#6b6b7b',
+              text: '#e4e4eb',
+              accent: '#3d8bfd',
+              'accent-glow': '#3d8bfd33',
+              cyan: '#22d3ee',
+              amber: '#f59e0b',
+              resolve: '#2dd4bf',
+              danger: '#ef4444',
+            }
+          },
+          fontFamily: {
+            display: ['Sora', 'Pretendard Variable', 'sans-serif'],
+            body: ['Pretendard Variable', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="grain">
+  <div id="root"></div>
+
+  <!-- App -->
+  <script type="text/babel" src="js/app.js"></script>
+</body>
+</html>

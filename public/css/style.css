@@ -1,0 +1,61 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #08080a; color: #e4e4eb; font-family: 'Pretendard Variable', sans-serif; overflow: hidden; height: 100vh; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a2a32; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3d8bfd; }
+
+/* Timeline marker tooltip */
+.marker-tooltip {
+  opacity: 0;
+  transform: translateX(-50%) translateY(4px);
+  transition: all 0.15s ease;
+  pointer-events: none;
+}
+.marker-group:hover .marker-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Comment highlight animation */
+@keyframes commentFlash {
+  0% { background: #3d8bfd22; }
+  100% { background: transparent; }
+}
+.comment-highlight {
+  animation: commentFlash 1.5s ease-out;
+}
+
+/* Grain overlay */
+.grain::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* Playhead */
+.playhead {
+  transition: left 0.1s linear;
+}
+
+/* Export dropdown */
+.export-menu {
+  transform-origin: top right;
+  transition: all 0.15s ease;
+}
+
+/* Focus ring */
+input:focus, textarea:focus, button:focus-visible {
+  outline: 1px solid #3d8bfd;
+  outline-offset: 1px;
+}
+
+/* Glow effect */
+.glow-line {
+  box-shadow: 0 0 8px #3d8bfd44, 0 0 2px #3d8bfd;
+}
