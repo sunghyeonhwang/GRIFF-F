@@ -56,7 +56,15 @@ function getAuthorInitial(name) {
 }
 
 function extractVimeoId(url) {
+  // 비공개 영상: vimeo.com/1170147115/99811327b3 → "1170147115"
+  // 일반 영상: vimeo.com/123456789 → "123456789"
   const match = url.match(/vimeo\.com\/(\d+)/);
+  return match ? match[1] : null;
+}
+
+function extractVimeoHash(url) {
+  // 비공개 영상 해시: vimeo.com/1170147115/99811327b3 → "99811327b3"
+  const match = url.match(/vimeo\.com\/\d+\/([a-f0-9]+)/);
   return match ? match[1] : null;
 }
 
@@ -451,16 +459,38 @@ function ExportDropdown({ comments, duration, projectTitle }) {
 // ========================================
 // Video Player Component
 // ========================================
-function VideoPlayer({ vimeoId, currentTime, isPlaying, onPlayPause, playbackRate, onRateChange, onTimeUpdate, onDurationReady, duration, isEnded, onEnded, onError, volume, onVolumeChange, isMuted, onMuteToggle, playerRefOut, hideControls, tc }) {
+function VideoPlayer({ vimeoId, vimeoUrl, currentTime, isPlaying, onPlayPause, playbackRate, onRateChange, onTimeUpdate, onDurationReady, duration, isEnded, onEnded, onError, volume, onVolumeChange, isMuted, onMuteToggle, playerRefOut, hideControls, tc }) {
   const containerRef = useRef(null);
   const playerRef = useRef(null);
   const [playerReady, setPlayerReady] = useState(false);
 
-  useEffect(() => {
-    if (!containerRef.current || playerRef.current) return;
+  // 콜백 refs (stale closure 방지)
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  const onDurationReadyRef = useRef(onDurationReady);
+  const onEndedRef = useRef(onEnded);
+  const onErrorRef = useRef(onError);
+  useEffect(() => { onTimeUpdateRef.current = onTimeUpdate; }, [onTimeUpdate]);
+  useEffect(() => { onDurationReadyRef.current = onDurationReady; }, [onDurationReady]);
+  useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
 
-    const player = new Vimeo.Player(containerRef.current, {
-      id: vimeoId,
+  // 영상 소스 키 (url 또는 id)
+  const playerKey = vimeoUrl || vimeoId;
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // 기존 플레이어 정리 + DOM 클리어
+    if (playerRef.current) {
+      try { playerRef.current.destroy(); } catch(e) {}
+      playerRef.current = null;
+      setPlayerReady(false);
+    }
+    // 이전 iframe 잔여물 제거
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    const playerOpts = {
       width: '100%',
       responsive: true,
       byline: false,
@@ -468,32 +498,38 @@ function VideoPlayer({ vimeoId, currentTime, isPlaying, onPlayPause, playbackRat
       portrait: false,
       controls: false,
       keyboard: false,
-    });
+    };
+    if (vimeoUrl) {
+      playerOpts.url = vimeoUrl;
+    } else {
+      playerOpts.id = vimeoId;
+    }
+    const player = new Vimeo.Player(container, playerOpts);
 
     playerRef.current = player;
 
     player.ready().then(() => {
       setPlayerReady(true);
       player.getDuration().then(dur => {
-        if (onDurationReady) onDurationReady(dur);
+        if (onDurationReadyRef.current) onDurationReadyRef.current(dur);
+      });
+      // ready 후 이벤트 등록
+      player.on('timeupdate', (data) => {
+        if (onTimeUpdateRef.current) onTimeUpdateRef.current(data.seconds);
+      });
+      player.on('ended', () => {
+        if (onEndedRef.current) onEndedRef.current();
       });
     }).catch(err => {
-      if (onError) onError('Vimeo 영상을 로드할 수 없습니다. URL을 확인해주세요.');
-    });
-
-    player.on('timeupdate', (data) => {
-      if (onTimeUpdate) onTimeUpdate(data.seconds);
-    });
-
-    player.on('ended', () => {
-      if (onEnded) onEnded();
+      console.error('[GRIFF] Player ready failed:', err);
+      if (onErrorRef.current) onErrorRef.current('Vimeo 영상을 로드할 수 없습니다. URL을 확인해주세요.');
     });
 
     return () => {
-      player.destroy();
+      try { player.destroy(); } catch(e) {}
       playerRef.current = null;
     };
-  }, [vimeoId]);
+  }, [playerKey]);
 
   useEffect(() => {
     if (!playerRef.current || !playerReady) return;
@@ -510,10 +546,8 @@ function VideoPlayer({ vimeoId, currentTime, isPlaying, onPlayPause, playbackRat
   }, [playbackRate, playerReady]);
 
   useEffect(() => {
-    // CompareView에서 두 플레이어가 충돌하지 않도록, playerRefOut이 없을 때만 전역에 등록
-    if (!playerRefOut) {
-      window.__griffPlayer = playerRef.current;
-    }
+    // 전역 + ref 양쪽 모두 등록
+    window.__griffPlayer = playerRef.current;
     if (playerRefOut) playerRefOut.current = playerRef.current;
   }, [playerReady]);
 
@@ -581,7 +615,7 @@ function VideoPlayer({ vimeoId, currentTime, isPlaying, onPlayPause, playbackRat
 // ========================================
 // Timeline Component
 // ========================================
-function Timeline({ comments, currentTime, duration, activeCommentId, onMarkerClick, onSeek, onPlayPause, isPlaying, isFullscreen, onFullscreenToggle, tc, onTcToggle, onRangeSelect, pendingRange }) {
+function Timeline({ comments, currentTime, duration, activeCommentId, onMarkerClick, onSeek, onPlayPause, isPlaying, isFullscreen, onFullscreenToggle, tc, onTcToggle, onRangeSelect, pendingRange, onSkip }) {
   const timelineRef = useRef(null);
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -719,14 +753,16 @@ function Timeline({ comments, currentTime, duration, activeCommentId, onMarkerCl
       </div>
 
       <div className="relative flex items-center justify-center gap-3 mt-3">
-        <button className="text-frame-muted hover:text-frame-text transition-colors">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+        <button onClick={() => onSkip && onSkip(-5)} className="text-frame-muted hover:text-frame-text transition-colors flex items-center gap-0.5 text-[11px] font-mono" title="5초 뒤로 (←)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+          5s
         </button>
         <button onClick={onPlayPause} className="w-9 h-9 rounded-full bg-frame-accent flex items-center justify-center hover:bg-frame-accent/80 transition-colors">
           {isPlaying ? <PauseIcon /> : <PlayIcon />}
         </button>
-        <button className="text-frame-muted hover:text-frame-text transition-colors">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+        <button onClick={() => onSkip && onSkip(10)} className="text-frame-muted hover:text-frame-text transition-colors flex items-center gap-0.5 text-[11px] font-mono" title="10초 앞으로 (→)">
+          10s
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
         </button>
 
         <div className="absolute right-0 flex items-center gap-2">
@@ -1155,6 +1191,8 @@ function CompareView({ versions, projectId, onClose }) {
 
   const leftVersion = versions.find(v => v.id === leftVersionId);
   const rightVersion = versions.find(v => v.id === rightVersionId);
+  const leftVimeoUrl = leftVersion?.vimeo_url || null;
+  const rightVimeoUrl = rightVersion?.vimeo_url || null;
   const leftVimeoId = leftVersion ? extractVimeoId(leftVersion.vimeo_url) : null;
   const rightVimeoId = rightVersion ? extractVimeoId(rightVersion.vimeo_url) : null;
 
@@ -1179,11 +1217,9 @@ function CompareView({ versions, projectId, onClose }) {
     if (!leftContainerRef.current || !leftVimeoId) return;
     const el = leftContainerRef.current;
     while (el.firstChild) el.removeChild(el.firstChild);
-    const player = new Vimeo.Player(el, {
-      id: leftVimeoId, width: '100%', responsive: true,
-      byline: false, title: false, portrait: false, controls: false, keyboard: false,
-      autopause: false,
-    });
+    const leftOpts = { width: '100%', responsive: true, byline: false, title: false, portrait: false, controls: false, keyboard: false, autopause: false };
+    if (leftVimeoUrl) leftOpts.url = leftVimeoUrl; else leftOpts.id = leftVimeoId;
+    const player = new Vimeo.Player(el, leftOpts);
     el.__vPlayer = player;
     player.ready().then(function() {
       player.getDuration().then(function(d) { setSyncDuration(d); });
@@ -1198,11 +1234,9 @@ function CompareView({ versions, projectId, onClose }) {
     if (!rightContainerRef.current || !rightVimeoId) return;
     const el = rightContainerRef.current;
     while (el.firstChild) el.removeChild(el.firstChild);
-    const player = new Vimeo.Player(el, {
-      id: rightVimeoId, width: '100%', responsive: true,
-      byline: false, title: false, portrait: false, controls: false, keyboard: false,
-      autopause: false,
-    });
+    const rightOpts = { width: '100%', responsive: true, byline: false, title: false, portrait: false, controls: false, keyboard: false, autopause: false };
+    if (rightVimeoUrl) rightOpts.url = rightVimeoUrl; else rightOpts.id = rightVimeoId;
+    const player = new Vimeo.Player(el, rightOpts);
     el.__vPlayer = player;
     return () => { el.__vPlayer = null; player.destroy(); };
   }, [rightVimeoId]);
@@ -1379,20 +1413,24 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
   // 구간 코멘트
   const [pendingRange, setPendingRange] = useState(null);
 
-  const vimeoId = activeVersion ? extractVimeoId(activeVersion.vimeo_url) : extractVimeoId(project.vimeo_url);
+  const activeVimeoUrl = activeVersion ? activeVersion.vimeo_url : project.vimeo_url;
+  const vimeoId = extractVimeoId(activeVimeoUrl);
 
   // 버전 목록 로드
   useEffect(() => {
-    window.__griffAuth?.fetchProjectVersions(project.id).then(data => {
+    window.__griffAuth?.fetchProjectVersions(project.id).then(async (data) => {
       if (data && data.length > 0) {
         setVersions(data);
-        // initialVersionNumber가 있으면 해당 버전을 기본 활성으로
         if (initialVersionNumber) {
           const target = data.find(v => v.version_number === Number(initialVersionNumber));
           if (target) { setActiveVersion(target); return; }
         }
         const active = data.find(v => v.is_active) || data[data.length - 1];
         setActiveVersion(active);
+      } else if (!isGuest) {
+        // 버전이 없는 기존 프로젝트 → v1 자동 생성
+        const v1 = await window.__griffAuth?.createProjectVersion(project.id, project.vimeo_url, '초기 버전');
+        if (v1) { setVersions([v1]); setActiveVersion(v1); }
       }
     });
   }, [project.id, initialVersionNumber]);
@@ -1448,10 +1486,15 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
   const handlePlayPause = useCallback(() => { setIsEnded(false); setIsPlaying(prev => !prev); }, []);
   const handleEnded = useCallback(() => { setIsPlaying(false); setIsEnded(true); }, []);
 
-  const handleSeek = useCallback((time) => {
+  const seekTo = useCallback((time) => {
     setCurrentTime(time);
-    if (window.__griffPlayer) window.__griffPlayer.setCurrentTime(time);
+    const player = mainPlayerRef.current || window.__griffPlayer;
+    if (player) player.setCurrentTime(time).catch(() => {});
   }, []);
+
+  const handleSeek = useCallback((time) => {
+    seekTo(time);
+  }, [seekTo]);
 
   // 풀스크린 토글
   const handleFullscreenToggle = useCallback(() => {
@@ -1469,33 +1512,25 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
     return () => document.removeEventListener('fullscreenchange', handler);
   }, []);
 
-  // 키보드 단축키
+  // 키보드 단축키 (e.code 기반 — 한글 IME에서도 동작)
   useEffect(() => {
     const handler = (e) => {
       const tag = e.target.tagName.toLowerCase();
       if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
-      switch (e.key) {
-        case ' ':
+      switch (e.code) {
+        case 'Space':
           e.preventDefault();
           setIsEnded(false);
           setIsPlaying(prev => !prev);
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          setCurrentTime(prev => {
-            const t = Math.max(0, prev - 5);
-            if (window.__griffPlayer) window.__griffPlayer.setCurrentTime(t);
-            return t;
-          });
+          setCurrentTime(prev => { const t = Math.max(0, prev - 5); seekTo(t); return t; });
           break;
         case 'ArrowRight':
           e.preventDefault();
-          setCurrentTime(prev => {
-            const t = Math.min(duration, prev + 5);
-            if (window.__griffPlayer) window.__griffPlayer.setCurrentTime(t);
-            return t;
-          });
+          setCurrentTime(prev => { const t = Math.min(duration, prev + 5); seekTo(t); return t; });
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -1506,12 +1541,10 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
           e.preventDefault();
           setVolume(prev => Math.max(0, prev - 0.1));
           break;
-        case 'm':
-        case 'M':
+        case 'KeyM':
           setIsMuted(prev => !prev);
           break;
-        case 'f':
-        case 'F':
+        case 'KeyF':
           handleFullscreenToggle();
           break;
       }
@@ -1548,13 +1581,13 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
   const handleMarkerClick = useCallback((commentId) => {
     setActiveCommentId(commentId);
     const c = comments.find(x => x.id === commentId);
-    if (c) { setCurrentTime(c.timecode); if (window.__griffPlayer) window.__griffPlayer.setCurrentTime(c.timecode); }
-  }, [comments]);
+    if (c) seekTo(c.timecode);
+  }, [comments, seekTo]);
 
   const handleCommentClick = useCallback((commentId) => {
     setActiveCommentId(commentId);
     const c = comments.find(x => x.id === commentId);
-    if (c) { setCurrentTime(c.timecode); if (window.__griffPlayer) window.__griffPlayer.setCurrentTime(c.timecode); }
+    if (c) seekTo(c.timecode);
   }, [comments]);
 
   const handleResolve = useCallback((commentId) => {
@@ -1623,15 +1656,14 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
         <div className="flex-1 flex min-h-0">
           <div className="flex-1 flex flex-col p-4 pr-0 min-w-0 overflow-hidden">
             <div className="flex-1 flex flex-col min-h-0">
-              <VideoPlayer vimeoId={vimeoId} currentTime={currentTime} duration={duration} isPlaying={isPlaying} isEnded={isEnded} onPlayPause={handlePlayPause} onEnded={handleEnded} playbackRate={playbackRate} onRateChange={setPlaybackRate} onTimeUpdate={handleTimeUpdate} onDurationReady={handleDurationReady} onError={setError} volume={volume} onVolumeChange={setVolume} isMuted={isMuted} onMuteToggle={() => setIsMuted(prev => !prev)} playerRefOut={mainPlayerRef} tc={tc} />
-              <Timeline comments={comments} currentTime={currentTime} duration={duration} activeCommentId={activeCommentId} isPlaying={isPlaying} onMarkerClick={handleMarkerClick} onSeek={handleSeek} onPlayPause={handlePlayPause} isFullscreen={isFullscreen} onFullscreenToggle={handleFullscreenToggle} tc={tc} onTcToggle={() => setShowFrames(prev => !prev)} onRangeSelect={(start, end) => setPendingRange({ start, end })} pendingRange={pendingRange} />
+              <VideoPlayer vimeoId={vimeoId} vimeoUrl={activeVimeoUrl} currentTime={currentTime} duration={duration} isPlaying={isPlaying} isEnded={isEnded} onPlayPause={handlePlayPause} onEnded={handleEnded} playbackRate={playbackRate} onRateChange={setPlaybackRate} onTimeUpdate={handleTimeUpdate} onDurationReady={handleDurationReady} onError={setError} volume={volume} onVolumeChange={setVolume} isMuted={isMuted} onMuteToggle={() => setIsMuted(prev => !prev)} playerRefOut={mainPlayerRef} tc={tc} />
+              <Timeline comments={comments} currentTime={currentTime} duration={duration} activeCommentId={activeCommentId} isPlaying={isPlaying} onMarkerClick={handleMarkerClick} onSeek={handleSeek} onPlayPause={handlePlayPause} isFullscreen={isFullscreen} onFullscreenToggle={handleFullscreenToggle} tc={tc} onTcToggle={() => setShowFrames(prev => !prev)} onRangeSelect={(start, end) => setPendingRange({ start, end })} pendingRange={pendingRange} onSkip={(delta) => { const t = Math.max(0, Math.min(duration, currentTime + delta)); seekTo(t); }} />
             </div>
             <div className="flex items-center gap-4 mt-auto pt-3 border-t border-frame-border/50 text-[11px] text-frame-muted/50 font-mono">
               <span>Duration {tc(duration)}</span>
               <span>Comments {comments.length}</span>
               <span>Playback {playbackRate}x</span>
               {activeVersion && <span>v{activeVersion.version_number}{activeVersion.description ? ` — ${activeVersion.description}` : ''}</span>}
-              <span className="ml-auto">GRIFF Frame v0.4</span>
             </div>
           </div>
 

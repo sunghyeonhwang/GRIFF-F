@@ -64,7 +64,7 @@ const __authApi = {
     return data || [];
   },
 
-  // 프로젝트 생성
+  // 프로젝트 생성 (v1 자동 생성 포함)
   async createProject(title, vimeoUrl) {
     const sb = window.__griffSupabase?.getSupabase();
     if (!sb) return null;
@@ -75,6 +75,13 @@ const __authApi = {
       .select()
       .single();
     if (error) { console.error('[GRIFF] createProject:', error); return null; }
+    // v1 자동 생성
+    if (data) {
+      await sb.from('project_versions').insert({
+        project_id: data.id, version_number: 1, vimeo_url: vimeoUrl,
+        description: '초기 버전', is_active: true, created_by: user?.id
+      });
+    }
     return data;
   },
 
