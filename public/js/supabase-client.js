@@ -2,8 +2,8 @@
 // GRIFF Frame — Supabase Client
 // ============================================
 
-const SUPABASE_URL = 'https://aoohbaceqfjangcomlmh.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvb2hiYWNlcWZqYW5nY29tbG1oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwMjkyMzUsImV4cCI6MjA4NzYwNTIzNX0.ToItvcxfJIT41Jl9FwjkR8WRyzx2L9dNnCrDdmhSreo';
+const SUPABASE_URL = 'https://zhqjkrqhniqqwsgnykda.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpocWprcnFobmlxcXdzZ255a2RhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1Njg0NTcsImV4cCI6MjA4ODE0NDQ1N30.-KgX70iav5qSeoyHkv_BX52k_n2cfU28BHZxeVN-m04';
 
 // 현재 프로젝트 ID (DB에서 가져온 값)
 const PROJECT_ID = '7a0fcef1-1951-4ad7-9695-b8567aeb1ba9';
