@@ -28,6 +28,12 @@ CREATE POLICY "members_update_own_projects"
   TO authenticated
   USING (created_by = auth.uid());
 
+-- 멤버: 자기 프로젝트 삭제
+CREATE POLICY "members_delete_own_projects"
+  ON projects FOR DELETE
+  TO authenticated
+  USING (created_by = auth.uid());
+
 -- 게스트(anon): share_token으로 프로젝트 조회
 CREATE POLICY "guests_select_shared_projects"
   ON projects FOR SELECT
@@ -58,11 +64,14 @@ CREATE POLICY "members_insert_comments"
     )
   );
 
--- 멤버: 본인 코멘트 수정 (resolve 토글 등)
-CREATE POLICY "members_update_own_comments"
+-- 멤버: 본인 코멘트 수정 또는 프로젝트 소유자가 resolve 토글
+CREATE POLICY "members_update_comments"
   ON comments FOR UPDATE
   TO authenticated
-  USING (author_id = auth.uid());
+  USING (
+    author_id = auth.uid()
+    OR project_id IN (SELECT id FROM projects WHERE created_by = auth.uid())
+  );
 
 -- 멤버: 본인 코멘트 삭제
 CREATE POLICY "members_delete_own_comments"

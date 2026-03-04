@@ -43,17 +43,20 @@ async function fetchComments() {
   return data;
 }
 
-async function insertComment({ timecode_seconds, body, author_name, author_color }) {
+async function insertComment({ timecode_seconds, timecode_end_seconds, body, author_name, author_color, version_id }) {
   if (!sb) return null;
+  const row = {
+    project_id: PROJECT_ID,
+    timecode_seconds,
+    body,
+    author_name,
+    author_color,
+  };
+  if (timecode_end_seconds != null) row.timecode_end_seconds = timecode_end_seconds;
+  if (version_id) row.version_id = version_id;
   const { data, error } = await sb
     .from('comments')
-    .insert({
-      project_id: PROJECT_ID,
-      timecode_seconds,
-      body,
-      author_name,
-      author_color,
-    })
+    .insert(row)
     .select()
     .single();
   if (error) { console.error('[GRIFF] insertComment error:', error); return null; }
