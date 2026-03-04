@@ -311,12 +311,17 @@ function ProjectListPage({ user, onSelectProject, onLogout }) {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [profile, setProfile] = useState(null);
 
   useEffect(() => {
     window.__griffAuth?.fetchProjects().then(data => {
       setProjects(data || []);
       setLoading(false);
     });
+    if (user?.id) {
+      window.__griffAuth?.fetchProfile(user.id).then(p => setProfile(p));
+    }
   }, []);
 
   const handleCreate = (newProject) => {
@@ -338,7 +343,12 @@ function ProjectListPage({ user, onSelectProject, onLogout }) {
           <span className="font-display font-semibold text-sm text-frame-muted tracking-wide">GRIFF FRAME</span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-[12px] text-frame-muted font-mono">{user?.email}</span>
+          <button onClick={() => setShowProfile(true)} className="flex items-center gap-1.5 text-[12px] text-frame-muted hover:text-frame-text transition-colors" title="프로필 설정">
+            <div className="w-6 h-6 rounded-full bg-frame-accent/20 flex items-center justify-center text-[10px] font-bold text-frame-accent">
+              {(profile?.display_name || user?.email || '?').charAt(0).toUpperCase()}
+            </div>
+            <span className="font-mono">{profile?.display_name || user?.email}</span>
+          </button>
           <button onClick={onLogout} className="text-[12px] text-frame-muted hover:text-frame-text border border-frame-border rounded-md px-2.5 py-1 hover:border-frame-muted transition-colors">로그아웃</button>
         </div>
       </header>
@@ -390,6 +400,7 @@ function ProjectListPage({ user, onSelectProject, onLogout }) {
       </div>
 
       {showCreate && <CreateProjectModal onClose={() => setShowCreate(false)} onCreate={handleCreate} />}
+      {showProfile && <ProfileModal onClose={() => setShowProfile(false)} user={user} profile={profile} onUpdate={(p) => setProfile(p)} />}
     </div>
   );
 }
@@ -397,29 +408,46 @@ function ProjectListPage({ user, onSelectProject, onLogout }) {
 // ========================================
 // Review Header
 // ========================================
-function ReviewHeader({ project, onExportClick, showExport, onShareClick, onBack, comments, duration }) {
+function ReviewHeader({ project, onExportClick, showExport, onShareClick, onBack, comments, duration, myRole, onSettingsClick, isGuest }) {
   return (
     <header className="h-14 border-b border-frame-border flex items-center justify-between px-5 flex-shrink-0">
       <div className="flex items-center gap-4">
-        <button onClick={onBack} className="flex items-center gap-2 group" title="프로젝트 목록">
-          <Logo />
-          <span className="font-display font-semibold text-sm text-frame-muted tracking-wide group-hover:text-frame-text transition-colors">GRIFF FRAME</span>
-        </button>
+        {onBack && (
+          <button onClick={onBack} className="flex items-center gap-2 group" title="프로젝트 목록">
+            <Logo />
+            <span className="font-display font-semibold text-sm text-frame-muted tracking-wide group-hover:text-frame-text transition-colors">GRIFF FRAME</span>
+          </button>
+        )}
+        {!onBack && (
+          <div className="flex items-center gap-2">
+            <Logo />
+            <span className="font-display font-semibold text-sm text-frame-muted tracking-wide">GRIFF FRAME</span>
+          </div>
+        )}
         <div className="w-px h-5 bg-frame-border"/>
         <h1 className="font-display font-medium text-[15px] text-frame-text">{project.title}</h1>
         <span className="text-[11px] font-mono text-frame-muted bg-frame-elevated px-2 py-0.5 rounded">{new Date(project.created_at).toLocaleDateString('ko-KR')}</span>
       </div>
       <div className="flex items-center gap-2">
-        <button onClick={onShareClick} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-frame-muted hover:text-frame-text border border-frame-border rounded-md hover:border-frame-muted transition-colors">
-          <ShareIcon /> 공유 링크
-        </button>
-        <div className="relative">
-          <button onClick={onExportClick} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-frame-accent/10 text-frame-accent border border-frame-accent/30 rounded-md hover:bg-frame-accent/20 transition-colors">
-            <ExportIcon /> 내보내기
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="ml-0.5"><path d="M7 10l5 5 5-5z"/></svg>
+        {!isGuest && (myRole === 'owner' || myRole === 'member') && (
+          <button onClick={onShareClick} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-frame-muted hover:text-frame-text border border-frame-border rounded-md hover:border-frame-muted transition-colors">
+            <ShareIcon /> 공유
           </button>
-          {showExport && <ExportDropdown comments={comments} duration={duration} projectTitle={project.title} />}
-        </div>
+        )}
+        {!isGuest && (
+          <div className="relative">
+            <button onClick={onExportClick} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] bg-frame-accent/10 text-frame-accent border border-frame-accent/30 rounded-md hover:bg-frame-accent/20 transition-colors">
+              <ExportIcon /> 내보내기
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="ml-0.5"><path d="M7 10l5 5 5-5z"/></svg>
+            </button>
+            {showExport && <ExportDropdown comments={comments} duration={duration} projectTitle={project.title} />}
+          </div>
+        )}
+        {!isGuest && onSettingsClick && (
+          <button onClick={onSettingsClick} className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-frame-muted hover:text-frame-text border border-frame-border rounded-md hover:border-frame-muted transition-colors" title="프로젝트 설정">
+            <SettingsIcon />
+          </button>
+        )}
       </div>
     </header>
   );
@@ -1070,6 +1098,320 @@ function ShareModal({ onClose, shareToken, versions }) {
 }
 
 // ========================================
+// Settings Icon Component
+// ========================================
+function SettingsIcon() {
+  return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>;
+}
+
+// ========================================
+// Profile Modal
+// ========================================
+function ProfileModal({ onClose, user, profile, onUpdate }) {
+  const [displayName, setDisplayName] = useState(profile?.display_name || '');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [nameAvailable, setNameAvailable] = useState(null);
+  const checkTimerRef = useRef(null);
+
+  const handleNameChange = (val) => {
+    setDisplayName(val);
+    setNameAvailable(null);
+    setError('');
+    if (checkTimerRef.current) clearTimeout(checkTimerRef.current);
+    if (val.trim() && val.trim() !== profile?.display_name) {
+      setChecking(true);
+      checkTimerRef.current = setTimeout(async () => {
+        const isDup = await window.__griffAuth?.checkDisplayName(val.trim(), user?.id);
+        setNameAvailable(!isDup);
+        setChecking(false);
+      }, 500);
+    } else {
+      setChecking(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!displayName.trim()) return;
+    setLoading(true);
+    setError('');
+    const result = await window.__griffAuth?.updateDisplayName(user.id, displayName.trim());
+    setLoading(false);
+    if (result?.error) { setError(result.error); }
+    else { onUpdate(result.data); onClose(); }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-frame-elevated border border-frame-border rounded-xl p-6 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <h3 className="font-display font-semibold text-[16px] text-frame-text mb-4">프로필 설정</h3>
+        {error && <ErrorBanner message={error} onDismiss={() => setError('')} />}
+        <form onSubmit={handleSubmit} className="mt-2 space-y-3">
+          <div>
+            <label className="text-[12px] text-frame-muted block mb-1">이메일</label>
+            <input readOnly value={user?.email || ''} className="w-full bg-frame-surface border border-frame-border rounded-md px-3 py-2.5 text-[13px] text-frame-muted font-mono" />
+          </div>
+          <div>
+            <label className="text-[12px] text-frame-muted block mb-1">표시 이름</label>
+            <div className="relative">
+              <input type="text" value={displayName} onChange={e => handleNameChange(e.target.value)} required className="w-full bg-frame-surface border border-frame-border rounded-md px-3 py-2.5 text-[14px] text-frame-text placeholder:text-frame-muted/40 focus:border-frame-accent transition-colors pr-8" />
+              {checking && <div className="absolute right-2.5 top-1/2 -translate-y-1/2"><Spinner size="sm" /></div>}
+              {nameAvailable === true && <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-frame-resolve text-[12px]">&#10003;</span>}
+              {nameAvailable === false && <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-frame-danger text-[12px]">&#10007;</span>}
+            </div>
+            {nameAvailable === false && <p className="text-[11px] text-frame-danger mt-1">이미 사용 중인 이름입니다.</p>}
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 text-[13px] text-frame-muted border border-frame-border rounded-md hover:border-frame-muted transition-colors">취소</button>
+            <button type="submit" disabled={loading || nameAvailable === false || checking} className="flex-1 py-2.5 bg-frame-accent text-white text-[13px] font-medium rounded-md hover:bg-frame-accent/80 disabled:opacity-50 transition-all">
+              {loading ? <Spinner size="sm" /> : '저장'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ========================================
+// Project Settings Modal (멤버/초대/공유)
+// ========================================
+function ProjectSettingsModal({ onClose, project, myRole, onProjectUpdate }) {
+  const [tab, setTab] = useState('members'); // members | invites | share
+  const [members, setMembers] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteLinkType, setInviteLinkType] = useState('member');
+  const [inviteError, setInviteError] = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState('');
+  const isOwner = myRole === 'owner';
+
+  useEffect(() => {
+    Promise.all([
+      window.__griffAuth?.fetchProjectMembers(project.id),
+      window.__griffAuth?.fetchInvites(project.id),
+    ]).then(([m, i]) => {
+      setMembers(m || []);
+      setInvites(i || []);
+      setLoading(false);
+    });
+  }, [project.id]);
+
+  const handleInviteByEmail = async (e) => {
+    e.preventDefault();
+    setInviteError(''); setInviteSuccess('');
+    if (!inviteEmail.trim()) return;
+    const result = await window.__griffAuth?.inviteByEmail(project.id, inviteEmail.trim());
+    if (result?.error) { setInviteError(typeof result.error === 'string' ? result.error : result.error.message || '초대 실패'); }
+    else {
+      setInviteSuccess(`${inviteEmail}에 초대를 보냈습니다.`);
+      setInviteEmail('');
+      const inv = await window.__griffAuth?.fetchInvites(project.id);
+      setInvites(inv || []);
+    }
+  };
+
+  const handleCreateLink = async () => {
+    const inv = await window.__griffAuth?.createInviteLink(project.id, inviteLinkType);
+    if (inv) {
+      setInvites(prev => [inv, ...prev]);
+      const url = `${window.location.origin}${window.location.pathname}?invite=${inv.invite_token}`;
+      navigator.clipboard?.writeText(url);
+      setInviteSuccess('초대 링크가 클립보드에 복사되었습니다.');
+      setTimeout(() => setInviteSuccess(''), 3000);
+    }
+  };
+
+  const handleToggleInvite = async (inviteId, isActive) => {
+    const ok = await window.__griffAuth?.toggleInviteActive(inviteId, !isActive);
+    if (ok) setInvites(prev => prev.map(i => i.id === inviteId ? { ...i, is_active: !isActive } : i));
+  };
+
+  const handleRoleChange = async (memberId, newRole) => {
+    const ok = await window.__griffAuth?.updateMemberRole(memberId, newRole);
+    if (ok) setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role: newRole } : m));
+  };
+
+  const handleRemoveMember = async (memberId, displayName) => {
+    if (!confirm(`${displayName}님을 프로젝트에서 제거하시겠습니까?`)) return;
+    const ok = await window.__griffAuth?.removeMember(memberId);
+    if (ok) setMembers(prev => prev.filter(m => m.id !== memberId));
+  };
+
+  const handleToggleShare = async () => {
+    const newVal = !project.share_enabled;
+    const ok = await window.__griffAuth?.toggleShareEnabled(project.id, newVal);
+    if (ok) onProjectUpdate({ ...project, share_enabled: newVal });
+  };
+
+  const handleRegenShareToken = async () => {
+    if (!confirm('공유 링크를 재생성하면 기존 링크가 무효화됩니다. 계속하시겠습니까?')) return;
+    const updated = await window.__griffAuth?.regenerateShareToken(project.id);
+    if (updated) onProjectUpdate(updated);
+  };
+
+  const tabs = [
+    { id: 'members', label: '멤버', count: members.length },
+    { id: 'invites', label: '초대' },
+    { id: 'share', label: '공유' },
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-frame-elevated border border-frame-border rounded-xl w-[520px] shadow-2xl max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 pt-5 pb-3">
+          <h3 className="font-display font-semibold text-[16px] text-frame-text">프로젝트 설정</h3>
+          <button onClick={onClose} className="text-frame-muted hover:text-frame-text transition-colors">&#10005;</button>
+        </div>
+
+        <div className="flex gap-1 px-5 border-b border-frame-border">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} className={`px-3 py-2 text-[13px] border-b-2 transition-colors ${tab === t.id ? 'border-frame-accent text-frame-accent' : 'border-transparent text-frame-muted hover:text-frame-text'}`}>
+              {t.label}{t.count != null ? ` (${t.count})` : ''}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5">
+          {loading ? (
+            <div className="py-8"><Spinner text="로딩..." /></div>
+          ) : tab === 'members' ? (
+            <div className="space-y-2">
+              {members.map(m => {
+                const name = m.profiles?.display_name || '(알수없음)';
+                const isMe = m.user_id === project.created_by; // rough check
+                return (
+                  <div key={m.id} className="flex items-center justify-between p-3 bg-frame-surface border border-frame-border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-frame-accent/20 flex items-center justify-center text-[13px] font-bold text-frame-accent">
+                        {name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <span className="text-[14px] text-frame-text">{name}</span>
+                        <span className={`ml-2 text-[11px] font-mono px-1.5 py-0.5 rounded ${m.role === 'owner' ? 'bg-frame-accent/20 text-frame-accent' : 'bg-frame-elevated text-frame-muted'}`}>{m.role}</span>
+                      </div>
+                    </div>
+                    {isOwner && m.role !== 'owner' && (
+                      <div className="flex items-center gap-2">
+                        <select value={m.role} onChange={e => handleRoleChange(m.id, e.target.value)} className="bg-frame-elevated border border-frame-border rounded px-2 py-1 text-[11px] text-frame-text">
+                          <option value="member">Member</option>
+                          <option value="owner">Owner</option>
+                        </select>
+                        <button onClick={() => handleRemoveMember(m.id, name)} className="text-frame-muted hover:text-frame-danger text-[11px] transition-colors" title="제거">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        </button>
+                      </div>
+                    )}
+                    {isOwner && m.role === 'owner' && (
+                      <span className="text-[11px] text-frame-muted">프로젝트 소유자</span>
+                    )}
+                  </div>
+                );
+              })}
+              {members.length === 0 && <p className="text-[13px] text-frame-muted text-center py-4">멤버가 없습니다.</p>}
+            </div>
+          ) : tab === 'invites' ? (
+            <div className="space-y-4">
+              <div>
+                <h4 className="text-[13px] font-medium text-frame-text mb-2">이메일로 초대</h4>
+                <form onSubmit={handleInviteByEmail} className="flex gap-2">
+                  <input type="email" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} placeholder="name@company.com" className="flex-1 bg-frame-surface border border-frame-border rounded-md px-3 py-2 text-[13px] text-frame-text placeholder:text-frame-muted/40 focus:border-frame-accent transition-colors" />
+                  <button type="submit" className="px-3 py-2 bg-frame-accent text-white text-[13px] rounded-md hover:bg-frame-accent/80 transition-colors">초대</button>
+                </form>
+              </div>
+
+              <div>
+                <h4 className="text-[13px] font-medium text-frame-text mb-2">초대 링크 생성</h4>
+                <div className="flex gap-2">
+                  <select value={inviteLinkType} onChange={e => setInviteLinkType(e.target.value)} className="bg-frame-surface border border-frame-border rounded-md px-3 py-2 text-[13px] text-frame-text">
+                    <option value="member">멤버 초대</option>
+                    <option value="guest">게스트 공유</option>
+                  </select>
+                  <button onClick={handleCreateLink} className="px-3 py-2 bg-frame-accent/10 text-frame-accent border border-frame-accent/30 text-[13px] rounded-md hover:bg-frame-accent/20 transition-colors">링크 생성</button>
+                </div>
+              </div>
+
+              {inviteError && <ErrorBanner message={inviteError} onDismiss={() => setInviteError('')} />}
+              {inviteSuccess && <div className="text-[12px] text-frame-resolve bg-frame-resolve/10 border border-frame-resolve/30 px-3 py-2 rounded-lg">{inviteSuccess}</div>}
+
+              {invites.length > 0 && (
+                <div>
+                  <h4 className="text-[13px] font-medium text-frame-text mb-2">초대 내역</h4>
+                  <div className="space-y-1.5">
+                    {invites.map(inv => (
+                      <div key={inv.id} className={`flex items-center justify-between p-2.5 bg-frame-surface border border-frame-border rounded-lg text-[12px] ${!inv.is_active ? 'opacity-50' : ''}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-1.5 py-0.5 rounded font-mono text-[10px] ${inv.invite_type === 'member' ? 'bg-frame-accent/20 text-frame-accent' : 'bg-frame-resolve/20 text-frame-resolve'}`}>
+                            {inv.invite_type === 'member' ? 'MEMBER' : 'GUEST'}
+                          </span>
+                          {inv.email ? (
+                            <span className="text-frame-text">{inv.email}</span>
+                          ) : (
+                            <span className="text-frame-muted font-mono">{inv.invite_token?.slice(0, 8)}...</span>
+                          )}
+                          {inv.accepted_at && <span className="text-frame-resolve">수락됨</span>}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {!inv.email && inv.is_active && !inv.accepted_at && (
+                            <button onClick={() => {
+                              const url = inv.invite_type === 'guest'
+                                ? `${window.location.origin}${window.location.pathname}?share=${project.share_token}`
+                                : `${window.location.origin}${window.location.pathname}?invite=${inv.invite_token}`;
+                              navigator.clipboard?.writeText(url);
+                            }} className="text-frame-muted hover:text-frame-text transition-colors" title="링크 복사">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                            </button>
+                          )}
+                          {isOwner && !inv.accepted_at && (
+                            <button onClick={() => handleToggleInvite(inv.id, inv.is_active)} className={`text-[11px] ${inv.is_active ? 'text-frame-muted hover:text-frame-danger' : 'text-frame-accent hover:text-frame-accent/80'} transition-colors`}>
+                              {inv.is_active ? '비활성화' : '활성화'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : tab === 'share' ? (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-frame-surface border border-frame-border rounded-lg">
+                <div>
+                  <h4 className="text-[14px] text-frame-text font-medium">게스트 공유 링크</h4>
+                  <p className="text-[12px] text-frame-muted mt-0.5">비로그인 사용자도 영상을 보고 코멘트를 남길 수 있습니다.</p>
+                </div>
+                {isOwner && (
+                  <button onClick={handleToggleShare} className={`relative w-11 h-6 rounded-full transition-colors ${project.share_enabled !== false ? 'bg-frame-accent' : 'bg-frame-border'}`}>
+                    <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition-transform ${project.share_enabled !== false ? 'left-[22px]' : 'left-0.5'}`} />
+                  </button>
+                )}
+              </div>
+
+              {project.share_enabled !== false && (
+                <div>
+                  <label className="text-[12px] text-frame-muted block mb-1">공유 URL</label>
+                  <div className="flex gap-2">
+                    <input readOnly value={`${window.location.origin}${window.location.pathname}?share=${project.share_token}`} className="flex-1 bg-frame-surface border border-frame-border rounded-md px-3 py-2 text-[12px] text-frame-text font-mono" />
+                    <button onClick={() => navigator.clipboard?.writeText(`${window.location.origin}${window.location.pathname}?share=${project.share_token}`)} className="px-3 py-2 bg-frame-accent text-white text-[12px] rounded-md hover:bg-frame-accent/80 transition-colors">복사</button>
+                  </div>
+                  {isOwner && (
+                    <button onClick={handleRegenShareToken} className="mt-2 text-[12px] text-frame-muted hover:text-frame-danger transition-colors">공유 링크 재생성</button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ========================================
 // Guest Name Modal Component
 // ========================================
 function GuestNameModal({ onSubmit }) {
@@ -1116,9 +1458,9 @@ function VersionTabBar({ versions, activeVersionId, onSwitchVersion, onAddVersio
           v{v.version_number}
         </button>
       ))}
-      <button onClick={onAddVersion} className="px-2 py-1 rounded text-[12px] text-frame-muted hover:text-frame-accent hover:bg-frame-accent/10 transition-all ml-1" title="새 버전 추가">
+      {onAddVersion && <button onClick={onAddVersion} className="px-2 py-1 rounded text-[12px] text-frame-muted hover:text-frame-accent hover:bg-frame-accent/10 transition-all ml-1" title="새 버전 추가">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      </button>
+      </button>}
       {versions.length >= 2 && (
         <button onClick={onCompare} className="flex items-center gap-1 px-2 py-1 rounded text-[12px] text-frame-muted hover:text-frame-accent hover:bg-frame-accent/10 transition-all ml-auto" title="버전 비교">
           <CompareIcon /> 비교
@@ -1381,7 +1723,8 @@ function CompareView({ versions, projectId, onClose }) {
 // ========================================
 // Review Page (기존 App)
 // ========================================
-function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, initialVersionNumber }) {
+function ReviewPage({ project: initialProject, onBack, isGuest, guestName: initialGuestName, initialVersionNumber, user }) {
+  const [project, setProject] = useState(initialProject);
   const [comments, setComments] = useState([]);
   const [activeCommentId, setActiveCommentId] = useState(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -1391,6 +1734,7 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
   const [isEnded, setIsEnded] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showShare, setShowShare] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [guestName, setGuestName] = useState(initialGuestName || '');
   const [showGuestModal, setShowGuestModal] = useState(isGuest && !initialGuestName);
   const [error, setError] = useState('');
@@ -1412,6 +1756,16 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
   const tc = useCallback(function(seconds) { return formatTC(seconds, showFrames, FPS); }, [showFrames]);
   // 구간 코멘트
   const [pendingRange, setPendingRange] = useState(null);
+  // 권한
+  const [myRole, setMyRole] = useState(isGuest ? 'guest' : null);
+
+  // 내 역할 조회
+  useEffect(() => {
+    if (isGuest) return;
+    window.__griffAuth?.getMyRole(project.id).then(role => {
+      setMyRole(role || 'member');
+    });
+  }, [project.id, isGuest]);
 
   const activeVimeoUrl = activeVersion ? activeVersion.vimeo_url : project.vimeo_url;
   const vimeoId = extractVimeoId(activeVimeoUrl);
@@ -1642,10 +1996,10 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
 
   return (
     <div ref={reviewContainerRef} className="h-screen flex flex-col bg-frame-bg">
-      <ReviewHeader project={project} onExportClick={(e) => { e.stopPropagation(); setShowExport(prev => !prev); }} showExport={showExport} onShareClick={() => setShowShare(true)} onBack={onBack} comments={comments} duration={duration} />
+      <ReviewHeader project={project} onExportClick={(e) => { e.stopPropagation(); setShowExport(prev => !prev); }} showExport={showExport} onShareClick={() => setShowShare(true)} onBack={onBack} comments={comments} duration={duration} myRole={myRole} isGuest={isGuest} onSettingsClick={!isGuest ? () => setShowSettings(true) : null} />
 
       {versions.length > 0 && !compareMode && (
-        <VersionTabBar versions={versions} activeVersionId={activeVersion?.id} onSwitchVersion={handleSwitchVersion} onAddVersion={() => setShowAddVersion(true)} onCompare={() => setCompareMode(true)} />
+        <VersionTabBar versions={versions} activeVersionId={activeVersion?.id} onSwitchVersion={handleSwitchVersion} onAddVersion={!isGuest ? () => setShowAddVersion(true) : null} onCompare={() => setCompareMode(true)} />
       )}
 
       {error && <div className="px-5 pt-2"><ErrorBanner message={error} onDismiss={() => setError('')} /></div>}
@@ -1671,7 +2025,7 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
             {loading ? (
               <div className="flex-1 flex items-center justify-center"><Spinner text="코멘트 로딩..." /></div>
             ) : (
-              <CommentPanel comments={comments} activeCommentId={activeCommentId} onCommentClick={handleCommentClick} onResolve={handleResolve} onAddComment={handleAddComment} currentTime={currentTime} guestName={guestName} tc={tc} pendingRange={pendingRange} onClearRange={() => setPendingRange(null)} />
+              <CommentPanel comments={comments} activeCommentId={activeCommentId} onCommentClick={handleCommentClick} onResolve={isGuest ? null : handleResolve} onAddComment={handleAddComment} currentTime={currentTime} guestName={guestName} tc={tc} pendingRange={pendingRange} onClearRange={() => setPendingRange(null)} />
             )}
           </div>
         </div>
@@ -1680,6 +2034,7 @@ function ReviewPage({ project, onBack, isGuest, guestName: initialGuestName, ini
       {showShare && <ShareModal onClose={() => setShowShare(false)} shareToken={project.share_token} versions={versions} />}
       {showGuestModal && <GuestNameModal onSubmit={(name) => { setGuestName(name); localStorage.setItem('griff_guest_name', name); setShowGuestModal(false); }} />}
       {showAddVersion && <AddVersionModal onClose={() => setShowAddVersion(false)} onAdd={handleAddVersion} />}
+      {showSettings && <ProjectSettingsModal onClose={() => setShowSettings(false)} project={project} myRole={myRole} onProjectUpdate={(updated) => setProject(updated)} />}
     </div>
   );
 }
@@ -1696,11 +2051,14 @@ function App() {
 
   // 게스트 버전 번호 (URL ?v= 파라미터)
   const [guestVersionNumber, setGuestVersionNumber] = useState(null);
+  // 초대 토큰 (URL ?invite= 파라미터)
+  const [pendingInviteToken, setPendingInviteToken] = useState(null);
 
-  // 초기 라우팅: share 파라미터 확인 → 세션 확인
+  // 초기 라우팅: share/invite 파라미터 확인 → 세션 확인
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const shareToken = params.get('share');
+    const inviteToken = params.get('invite');
     const vParam = params.get('v');
 
     if (shareToken) {
@@ -1717,10 +2075,25 @@ function App() {
       return;
     }
 
+    if (inviteToken) {
+      setPendingInviteToken(inviteToken);
+    }
+
     // 멤버 세션 확인
-    window.__griffAuth?.getUser().then(u => {
+    window.__griffAuth?.getUser().then(async (u) => {
       if (u) {
         setUser(u);
+        // 초대 토큰이 있으면 수락
+        if (inviteToken) {
+          const result = await window.__griffAuth?.acceptInviteByToken(inviteToken);
+          if (result?.project) {
+            setCurrentProject(result.project);
+            // URL 정리
+            window.history.replaceState({}, '', window.location.pathname);
+            setPage('review');
+            return;
+          }
+        }
         setPage('projects');
       } else {
         setPage('login');
@@ -1739,8 +2112,20 @@ function App() {
     return () => { sub?.unsubscribe(); };
   }, []);
 
-  const handleLogin = (session) => {
-    setUser(session?.user);
+  const handleLogin = async (session) => {
+    const u = session?.user;
+    setUser(u);
+    // 로그인 후 pending invite 처리
+    if (pendingInviteToken && u) {
+      const result = await window.__griffAuth?.acceptInviteByToken(pendingInviteToken);
+      setPendingInviteToken(null);
+      window.history.replaceState({}, '', window.location.pathname);
+      if (result?.project) {
+        setCurrentProject(result.project);
+        setPage('review');
+        return;
+      }
+    }
     setPage('projects');
   };
 
@@ -1778,7 +2163,7 @@ function App() {
   if (page === 'review') {
     const project = guestProject || currentProject;
     if (!project) { setPage('projects'); return null; }
-    return <ReviewPage project={project} onBack={guestProject ? null : handleBackToProjects} isGuest={!!guestProject} guestName={guestName} initialVersionNumber={guestProject ? guestVersionNumber : null} />;
+    return <ReviewPage project={project} onBack={guestProject ? null : handleBackToProjects} isGuest={!!guestProject} guestName={guestName} initialVersionNumber={guestProject ? guestVersionNumber : null} user={user} />;
   }
 
   return null;
