@@ -8,7 +8,31 @@ const __authApi = {
     const sb = window.__griffSupabase?.getSupabase();
     if (!sb) return { error: { message: 'Supabase 미연결' } };
     const { data, error } = await sb.auth.signUp({ email, password });
+    // 가입 성공 후 프로필 생성 보장 (trigger 실패 대비)
+    if (!error && data?.user) {
+      await this.ensureProfile(data.user.id, email);
+    }
     return { data, error };
+  },
+
+  // 프로필 존재 보장 (trigger 실패 시 클라이언트 fallback)
+  async ensureProfile(userId, email) {
+    const sb = window.__griffSupabase?.getSupabase();
+    if (!sb) return;
+    const { data: existing } = await sb.from('profiles').select('id').eq('id', userId).maybeSingle();
+    if (!existing) {
+      const baseName = email.split('@')[0];
+      // 중복 시 숫자 붙이기
+      let name = baseName;
+      let suffix = 0;
+      while (true) {
+        const { data: dup } = await sb.from('profiles').select('id').eq('display_name', name).maybeSingle();
+        if (!dup) break;
+        suffix++;
+        name = baseName + suffix;
+      }
+      await sb.from('profiles').insert({ id: userId, display_name: name });
+    }
   },
 
   // 로그인
@@ -17,6 +41,8 @@ const __authApi = {
     if (!sb) return { error: { message: 'Supabase 미연결' } };
     const { data, error } = await sb.auth.signInWithPassword({ email, password });
     if (!error && data?.user) {
+      // 프로필 존재 보장
+      await this.ensureProfile(data.user.id, data.user.email);
       // 로그인 시 pending invite 확인 및 수락
       await this.acceptPendingInvites(data.user.email, data.user.id);
     }
@@ -68,7 +94,7 @@ const __authApi = {
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
     if (error) { console.error('[GRIFF] fetchProfile:', error); return null; }
     return data;
   },
@@ -167,13 +193,26 @@ const __authApi = {
   async fetchProjectMembers(projectId) {
     const sb = window.__griffSupabase?.getSupabase();
     if (!sb) return [];
-    const { data, error } = await sb
+    // 멤버 목록 조회
+    const { data: members, error } = await sb
       .from('project_members')
-      .select('*, profiles:user_id(display_name, avatar_url)')
+      .select('*')
       .eq('project_id', projectId)
       .order('created_at', { ascending: true });
     if (error) { console.error('[GRIFF] fetchMembers:', error); return []; }
-    return data || [];
+    if (!members || members.length === 0) return [];
+    // 각 멤버의 프로필 조회
+    const userIds = members.map(m => m.user_id);
+    const { data: profiles } = await sb
+      .from('profiles')
+      .select('id, display_name, avatar_url')
+      .in('id', userIds);
+    const profileMap = {};
+    (profiles || []).forEach(p => { profileMap[p.id] = p; });
+    return members.map(m => ({
+      ...m,
+      profiles: profileMap[m.user_id] || null,
+    }));
   },
 
   // 내 역할 조회

@@ -2083,6 +2083,8 @@ function App() {
     window.__griffAuth?.getUser().then(async (u) => {
       if (u) {
         setUser(u);
+        // 프로필 존재 보장
+        await window.__griffAuth?.ensureProfile(u.id, u.email);
         // 초대 토큰이 있으면 수락
         if (inviteToken) {
           const result = await window.__griffAuth?.acceptInviteByToken(inviteToken);
