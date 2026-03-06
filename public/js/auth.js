@@ -496,7 +496,7 @@ const __authApi = {
     return true;
   },
 
-  // share_token으로 프로젝트 조회 (게스트)
+  // share_token으로 프로젝트 조회 (게스트 또는 공유 링크 접근)
   async fetchProjectByShareToken(token) {
     const sb = window.__griffSupabase?.getSupabase();
     if (!sb) return null;
@@ -504,6 +504,7 @@ const __authApi = {
       .from('projects')
       .select('*')
       .eq('share_token', token)
+      .eq('share_enabled', true)
       .single();
     if (error) { console.error('[GRIFF] fetchByShareToken:', error); return null; }
     return data;
